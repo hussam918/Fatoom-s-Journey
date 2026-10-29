@@ -12,6 +12,9 @@ import type { Completion, Family, Profile, Reward, RewardRequest, Task } from "@
 type Notice = { kind: "success" | "error"; text: string } | null;
 
 const weekdayNames = ["الأحد", "الإثنين", "الثلاثاء", "الأربعاء", "الخميس", "الجمعة", "السبت"];
+// This is the dedicated Supabase Auth identity for Fatima. The six-digit PIN is
+// her password; keeping a separate Auth user preserves the database's child RLS role.
+const CHILD_LOGIN_EMAIL = "fatima@fatoom-s-journey.app";
 const toLocalDate = (date = new Date()) => {
   const y = date.getFullYear();
   const m = String(date.getMonth() + 1).padStart(2, "0");
@@ -36,6 +39,7 @@ export default function HomePage() {
   const [notice, setNotice] = useState<Notice>(null);
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [loginMode, setLoginMode] = useState<"child" | "parent">("child");
   const [taskTitle, setTaskTitle] = useState("");
   const [taskDescription, setTaskDescription] = useState("");
   const [taskStars, setTaskStars] = useState("2");
@@ -138,9 +142,12 @@ export default function HomePage() {
     event.preventDefault();
     if (!supabase) return;
     setBusy(true); setNotice(null);
-    const { error } = await supabase.auth.signInWithPassword({ email: email.trim(), password });
+    const { error } = await supabase.auth.signInWithPassword({
+      email: loginMode === "child" ? CHILD_LOGIN_EMAIL : email.trim(),
+      password,
+    });
     setBusy(false);
-    if (error) setNotice({ kind: "error", text: "تعذر تسجيل الدخول. تأكد من البريد وكلمة المرور." });
+    if (error) setNotice({ kind: "error", text: loginMode === "child" ? "الرمز غير صحيح. جرّبي مرة أخرى." : "تعذر تسجيل الدخول. تأكد من البريد وكلمة المرور." });
   }
 
   async function signOut() {
@@ -235,7 +242,7 @@ export default function HomePage() {
   };
   if (!configured) return <SetupScreen />;
   if (loading) return <div className="screen-center"><div className="loading-mark"><Sparkles size={24} /></div><p>نجهز عالم فاطمة...</p></div>;
-  if (!sessionUser) return <LoginScreen email={email} setEmail={setEmail} password={password} setPassword={setPassword} onSubmit={signIn} notice={notice} busy={busy} />;
+  if (!sessionUser) return <LoginScreen mode={loginMode} setMode={(mode) => { setLoginMode(mode); setPassword(""); setNotice(null); }} email={email} setEmail={setEmail} password={password} setPassword={setPassword} onSubmit={signIn} notice={notice} busy={busy} />;
   if (!profile) return <AccountSetupScreen notice={notice} onSignOut={signOut} />;
 
   return (
@@ -279,10 +286,10 @@ export default function HomePage() {
   );
 }
 
-function LoginScreen({ email, setEmail, password, setPassword, onSubmit, notice, busy }: { email: string; setEmail: (v: string) => void; password: string; setPassword: (v: string) => void; onSubmit: (e: FormEvent<HTMLFormElement>) => void; notice: Notice; busy: boolean }) {
+function LoginScreen({ mode, setMode, email, setEmail, password, setPassword, onSubmit, notice, busy }: { mode: "child" | "parent"; setMode: (v: "child" | "parent") => void; email: string; setEmail: (v: string) => void; password: string; setPassword: (v: string) => void; onSubmit: (e: FormEvent<HTMLFormElement>) => void; notice: Notice; busy: boolean }) {
   return <main className="login-screen"><div className="login-decor decor-one" /><div className="login-decor decor-two" /><section className="login-card"><div className="login-brand"><span className="login-logo"><Sparkles size={28} /></span><p className="eyebrow">مساحة عائلتكم الخاصة</p><h1>رحلة فاطمة</h1><p className="login-subtitle">كل يوم مليان فرص صغيرة للإنجاز والفرح.</p></div>
     <div className="login-illustration"><span className="cloud cloud-a" /><span className="cloud cloud-b" /><span className="sun-face">☀</span><JourneyMascot variant="login" /><div className="illustration-caption"><span>✦</span><b>خطوة بخطوة، توصلين!</b><span>✦</span></div></div>
-    <form className="login-form" onSubmit={onSubmit}><div className="login-form-head"><h2>أهلًا بعودتكم</h2><p>سجّلوا الدخول للمتابعة</p></div>{notice && <div className={`notice ${notice.kind}`}><span>{notice.text}</span></div>}<label>البريد الإلكتروني<input type="email" required autoComplete="username" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="name@example.com" dir="ltr" /></label><label>كلمة المرور<input type="password" required autoComplete="current-password" value={password} onChange={(e) => setPassword(e.target.value)} placeholder="••••••••" dir="ltr" /></label><button className="primary-button full-button login-submit" disabled={busy} type="submit">{busy ? "جارٍ الدخول..." : "دخول إلى رحلتي"}<ArrowLeft size={18} /></button><div className="login-foot"><ShieldCheck size={15} />الدخول مخصص لأفراد العائلة فقط</div></form>
+    <form className="login-form" onSubmit={onSubmit}><div className="login-form-head"><h2>{mode === "child" ? "هلا يا فاطمة!" : "أهلًا بولي الأمر"}</h2><p>{mode === "child" ? "اكتبي رمزك السري عشان ندخل عالمك" : "سجّل الدخول لإدارة رحلة فاطمة"}</p></div><div className="login-mode-switch" role="group" aria-label="نوع تسجيل الدخول"><button type="button" className={mode === "child" ? "selected" : ""} aria-pressed={mode === "child"} onClick={() => setMode("child")}>دخول فاطمة</button><button type="button" className={mode === "parent" ? "selected" : ""} aria-pressed={mode === "parent"} onClick={() => setMode("parent")}>ولي الأمر</button></div>{notice && <div className={`notice ${notice.kind}`}><span>{notice.text}</span></div>}{mode === "parent" && <label>البريد الإلكتروني<input type="email" required autoComplete="username" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="name@example.com" dir="ltr" /></label>}<label>{mode === "child" ? "رمز الدخول · ٦ أرقام" : "كلمة المرور"}<input type="password" required autoComplete={mode === "child" ? "off" : "current-password"} inputMode={mode === "child" ? "numeric" : "text"} pattern={mode === "child" ? "[0-9]{6}" : undefined} minLength={mode === "child" ? 6 : undefined} maxLength={mode === "child" ? 6 : undefined} value={password} onChange={(e) => setPassword(mode === "child" ? e.target.value.replace(/\D/g, "").slice(0, 6) : e.target.value)} placeholder={mode === "child" ? "● ● ● ● ● ●" : "••••••••"} dir="ltr" /></label><button className="primary-button full-button login-submit" disabled={busy || (mode === "child" && password.length !== 6)} type="submit">{busy ? "جارٍ الدخول..." : "دخول إلى رحلتي"}<ArrowLeft size={18} /></button><div className="login-foot"><ShieldCheck size={15} />الدخول مخصص لأفراد العائلة فقط</div></form>
   </section><p className="login-footer">مصممة بحب لفاطمة <Heart size={14} fill="currentColor" /></p></main>;
 }
 
