@@ -51,5 +51,15 @@ export type RewardRequest = {
   reviewed_at: string | null;
 };
 
+export type PointAdjustment = {
+  id: string;
+  family_id: string;
+  child_id: string;
+  points: number;
+  behavior: string;
+  created_by: string;
+  created_at: string;
+};
+
 export type Family = { id: string; name: string };
 
