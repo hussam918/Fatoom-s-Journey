@@ -16,6 +16,18 @@ const weekdayNames = ["الأحد", "الإثنين", "الثلاثاء", "ال�
 // her password; keeping a separate Auth user preserves the database's child RLS role.
 const CHILD_LOGIN_EMAIL = "fatima@fatoom-s-journey.app";
 const CHILD_AVATARS = ["🌸", "🐰", "🦊", "🐱", "🐼", "🦄", "🐸", "🐥", "🐻", "🦋", "🐨", "🐙", "🐹"];
+const ENCOURAGEMENT_CARDS = [
+  { id: "kindness", kind: "hadith", title: "الكلمة الطيبة", message: "«الكلمة الطيبة صدقة»", note: "كلمة حلوة منك ممكن تفرّح قلب أحد!", art: "💌", tone: "rose", reference: "الحديث ٢٦ من الأربعين النووية", source: "https://sunnah.com/nawawi40/26" },
+  { id: "small-steps", kind: "encouragement", title: "خطوة صغيرة تكفي", message: "مو لازم تسوين كل شيء مرة وحدة. خطوة حلوة اليوم تصير إنجازًا كبيرًا مع الوقت.", note: "خذيها خطوة خطوة يا بطلة.", art: "🌱", tone: "mint" },
+  { id: "good-words", kind: "hadith", title: "اختاري أجمل الكلام", message: "«فليقل خيرًا أو ليصمت»", note: "الكلام اللطيف يخلّي يومنا أحلى.", art: "🦋", tone: "lavender", reference: "الحديث ١٥ من الأربعين النووية", source: "https://sunnah.com/nawawi40/15" },
+  { id: "try-again", kind: "encouragement", title: "كل يوم بداية جديدة", message: "إذا ما ضبطت معك من أول مرة، عادي! تقدرين تتعلمين وتحاولين مرة ثانية.", note: "المحاولة شجاعة بحد ذاتها.", art: "🌈", tone: "peach" },
+  { id: "ihsan", kind: "hadith", title: "أحسني في كل شيء", message: "«إن الله كتب الإحسان على كل شيء»", note: "اعملي الشيء الجميل بأحسن طريقة تقدرين عليها.", art: "🌼", tone: "sunshine", reference: "الحديث ١٧ من الأربعين النووية", source: "https://sunnah.com/nawawi40/17" },
+  { id: "calm", kind: "encouragement", title: "نفس هادئ، قلب قوي", message: "إذا تضايقتِ، خذي نفسًا هادئًا واحكي عن شعورك بكلمات لطيفة.", note: "مشاعرك مهمة، وتقدرين تعبّرين عنها بهدوء.", art: "☁️", tone: "sky" },
+  { id: "gentle-character", kind: "hadith", title: "خُلُقك الجميل يلمع", message: "«وخالق الناس بخلق حسن»", note: "الاحترام واللطف من أجمل الأشياء فيك.", art: "🐰", tone: "rose", reference: "الحديث ١٨ من الأربعين النووية", source: "https://sunnah.com/nawawi40/18" },
+  { id: "proud", kind: "encouragement", title: "أنا فخورة بمحاولتك", message: "كل مرة تساعدين فيها أو ترتبين شيئًا، أنتِ تكبرين وتتعلمين.", note: "كمّلي، أنتِ قدّها!", art: "⭐", tone: "sunshine" },
+  { id: "love-for-others", kind: "hadith", title: "نحب الخير لبعض", message: "«حتى يحب لأخيه ما يحب لنفسه»", note: "شاركي اللطف والفرح مع اللي حولك.", art: "🧸", tone: "peach", reference: "الحديث ١٣ من الأربعين النووية", source: "https://sunnah.com/nawawi40/13" },
+  { id: "mistakes", kind: "encouragement", title: "الاعتذار قوة", message: "إذا زعل أحد من تصرفك، كلمة «آسفة» ومحاولة جديدة تصلّح أشياء كثيرة.", note: "كلنا نتعلم، وكلنا نقدر نبدأ من جديد.", art: "💖", tone: "lavender" },
+];
 const toLocalDate = (date = new Date()) => {
   const y = date.getFullYear();
   const m = String(date.getMonth() + 1).padStart(2, "0");
@@ -399,13 +411,78 @@ function ChildHome({ profile, greeting, tasks, completions, todayDone, rewards, 
   const readyTasks = availableTasks.filter((task) => !todayDone.has(task.id));
   const nearest = rewards.find((item) => starBalance < item.stars_cost);
   return <><section className="welcome-banner child-banner"><div className="welcome-copy"><p className="eyebrow">{greeting}</p><h1>يا هلا يا {profile.display_name} <span>🌸</span></h1><p>كل إنجاز منك يضيف نجمة لحكايتك. مستعدة لمغامرة اليوم؟</p><div className="banner-tags"><span><Sparkles size={14} />أنتِ قدها</span><span><Heart size={14} fill="currentColor" />نحب نشوف إنجازاتك</span></div></div><div className="banner-art child-art"><span className="doodle-star star-a">✦</span><span className="doodle-star star-b">✧</span><span className="doodle-star star-c">✦</span><span className="art-ground" /><JourneyMascot variant="child" /></div></section>
-    <div className="stats-grid child-stats"><StatCard icon={<Star fill="currentColor" />} tone="yellow" label="نجومي" value={starBalance} hint="جاهزة للمكافآت" /><StatCard icon={<CheckCircle2 />} tone="mint" label="إنجازاتي" value={approvedStars ? completions.filter((item) => item.status === "approved").length : 0} hint="مهمة معتمدة" /><StatCard icon={<Trophy />} tone="lavender" label="مستواي" value={starBalance >= 30 ? "متألقة" : starBalance >= 12 ? "نجمة" : "بدايتي"} hint="كل نجمة تقربك" /></div>{deductedPoints > 0 && <div className="child-deduction-banner"><span>−{deductedPoints} نقطة</span><small>تقدرين تعوضينها بإنجازات جديدة 🌱</small></div>}
+    <div className="stats-grid child-stats"><StatCard icon={<Star fill="currentColor" />} tone="yellow" label="نجومي" value={starBalance} hint="جاهزة للمكافآت" /><StatCard icon={<CheckCircle2 />} tone="mint" label="إنجازاتي" value={approvedStars ? completions.filter((item) => item.status === "approved").length : 0} hint="مهمة معتمدة" /><StatCard icon={<Trophy />} tone="lavender" label="مستواي" value={starBalance >= 30 ? "متألقة" : starBalance >= 12 ? "نجمة" : "بدايتي"} hint="كل نجمة تقربك" /></div>
+    <EncouragementDeck userId={profile.user_id} />
+    {deductedPoints > 0 && <div className="child-deduction-banner"><span>−{deductedPoints} نقطة</span><small>تقدرين تعوضينها بإنجازات جديدة 🌱</small></div>}
     <section className="panel progress-panel"><div className="progress-copy"><span className="progress-icon"><Sparkles size={19} /></span><div><p className="eyebrow">مغامرة اليوم</p><h2>خطواتك نحو إنجاز اليوم</h2><p>{todayDone.size} من {tasks.length} مهام وصلت لولي الأمر</p></div></div><div className="progress-meter"><div className="progress-label"><span>تقدمك</span><b>{progress}%</b></div><div className="progress-track"><span style={{ width: `${progress}%` }} /></div></div></section>
     <div className="child-content-grid"><section className="panel tasks-panel"><div className="panel-heading"><div><p className="eyebrow">أول خطوة تبدأ الآن</p><h2>مهام اليوم <span className="count-badge">{readyTasks.length}</span></h2></div><span className="heading-icon lavender"><BookOpenCheck size={21} /></span></div>{availableTasks.length ? <div className="child-task-list">{availableTasks.map((task, index) => <TaskRow key={task.id} task={task} child todayDone={todayDone.has(task.id)} completion={completions.find((item) => item.task_id === task.id && item.task_date === toLocalDate())} onSubmit={() => onSubmitTask(task)} onDelete={() => {}} busy={busy} compact index={index} />)}</div> : <EmptyState icon={<BookOpenCheck />} title="يومك فاضي من المهام" text="اسألي ولي أمرك عن أول مغامرة!" />}</section>
       <div className="child-side-stack"><section className="panel star-panel"><div className="star-medallion"><Star size={28} fill="currentColor" /></div><p className="eyebrow">رصيدك الحلو</p><h2>{starBalance} <small>نجمة</small></h2><p>حافظي على حماسك، مكافأتك أقرب مما تتخيلين!</p>{nearest && <div className="next-reward"><span>المكافأة التالية</span><b>{nearest.name} <span>· {nearest.stars_cost - starBalance} نجمة</span></b><div className="progress-track small"><span style={{ width: `${Math.min(100, Math.round((starBalance / nearest.stars_cost) * 100))}%` }} /></div></div>}</section>
         <section className="panel quick-reward"><div className="panel-heading"><div><p className="eyebrow">اختاري هدفك</p><h2>مكافآت قريبة</h2></div><Gift size={19} className="muted-icon" /></div>{rewards.slice(0, 2).map((reward, i) => <div className="quick-reward-row" key={reward.id}><span className={`reward-emoji reward-${i}`}>{i ? "🎨" : "📖"}</span><span><b>{reward.name}</b><small>{reward.stars_cost} نجمة</small></span><button className="round-arrow" disabled={starBalance < reward.stars_cost || requests.some((r) => r.reward_id === reward.id)} aria-label={`طلب ${reward.name}`} onClick={() => onRequestReward(reward)}><ChevronLeft size={17} /></button></div>)}</section></div></div>
     <div className="child-note"><span>🌈</span><p><b>تذكري:</b> كل محاولة تستحق التصفيق، مو بس النتيجة. أنتِ مبدعة!</p><span>✦</span></div>
   </>;
+}
+
+type MessageDeckState = { order: number[]; readCount: number };
+
+function EncouragementDeck({ userId }: { userId: string }) {
+  const defaultOrder = ENCOURAGEMENT_CARDS.map((_, index) => index);
+  const [deck, setDeck] = useState<MessageDeckState>({ order: defaultOrder, readCount: 0 });
+  const [ready, setReady] = useState(false);
+  const storageKey = `fatoom-message-deck:${userId}`;
+
+  useEffect(() => {
+    try {
+      const saved = localStorage.getItem(storageKey);
+      if (saved) {
+        const parsed = JSON.parse(saved) as MessageDeckState;
+        const isValidOrder = Array.isArray(parsed.order)
+          && parsed.order.length === ENCOURAGEMENT_CARDS.length
+          && new Set(parsed.order).size === ENCOURAGEMENT_CARDS.length
+          && parsed.order.every((index) => Number.isInteger(index) && index >= 0 && index < ENCOURAGEMENT_CARDS.length);
+        if (isValidOrder) {
+          setDeck({ order: parsed.order, readCount: Number.isInteger(parsed.readCount) ? Math.max(0, Math.min(parsed.readCount, ENCOURAGEMENT_CARDS.length)) : 0 });
+        }
+      }
+    } catch {
+      // Keep a fresh deck if this browser does not allow local storage.
+    } finally {
+      setReady(true);
+    }
+  }, [storageKey]);
+
+  const card = ENCOURAGEMENT_CARDS[deck.order[0]];
+  const finishedRound = deck.readCount === ENCOURAGEMENT_CARDS.length;
+
+  function readCard() {
+    if (!ready || !card) return;
+    const nextDeck: MessageDeckState = {
+      order: [...deck.order.slice(1), deck.order[0]],
+      readCount: finishedRound ? 1 : deck.readCount + 1,
+    };
+    setDeck(nextDeck);
+    try {
+      localStorage.setItem(storageKey, JSON.stringify(nextDeck));
+    } catch {
+      // The card still advances for this visit if storage is unavailable.
+    }
+  }
+
+  if (!card) return null;
+
+  return <section className="encouragement-section" aria-label="بطاقات فاطمة التحفيزية">
+    <div className="encouragement-heading"><span className="encouragement-heading-icon"><Sparkles size={19} /></span><div><p className="eyebrow">رسالة صغيرة لقلبك</p><h2>بطاقات فاطمة الجميلة</h2></div><span className="deck-count">{ENCOURAGEMENT_CARDS.length} بطاقات</span></div>
+    <article className={`encouragement-card card-${card.tone}`}>
+      <div className="encouragement-art" aria-hidden="true"><span className="art-sparkle sparkle-a">✦</span><span className="art-sparkle sparkle-b">✧</span><span className="art-sparkle sparkle-c">·</span><span className="encouragement-illustration">{card.art}</span></div>
+      <div className="encouragement-copy">
+        <div className="message-label">{card.kind === "hadith" ? <><BookOpenCheck size={13} />حديث نبوي</> : <><Heart size={13} />كلام يفرّحك</>}</div>
+        <h3>{card.title}</h3>
+        <p className={card.kind === "hadith" ? "hadith-quote" : "encouragement-message"}>{card.message}</p>
+        <p className="encouragement-note">{card.note}</p>
+        {card.kind === "hadith" && <a className="hadith-reference" href={card.source} target="_blank" rel="noreferrer">{card.reference} · اقرئيه كاملًا <ArrowLeft size={13} /></a>}
+      </div>
+      <div className="encouragement-footer"><span>{finishedRound ? "يا سلام! مرّت عليك كل البطاقات 💫" : `قرأتِ ${deck.readCount} من ${ENCOURAGEMENT_CARDS.length} رسائل في هذه الجولة`}</span><button type="button" className="read-card-button" onClick={readCard} disabled={!ready}><Check size={16} />{finishedRound ? "ابدئي جولة جديدة" : "قرأتُها، التالية!"}<ChevronLeft size={16} /></button></div>
+    </article>
+  </section>;
 }
 
 function HistoryView({ profile, completions, tasks, childMap }: { profile: Profile; completions: Completion[]; tasks: Task[]; childMap: Map<string, Profile> }) {
