@@ -221,6 +221,143 @@ button:focus-visible, a:focus-visible, input:focus-visible, textarea:focus-visib
   *, *::before, *::after { scroll-behavior: auto !important; animation-duration: .01ms !important; animation-iteration-count: 1 !important; transition-duration: .01ms !important; }
 }
 
+.encouragement-section { margin: 20px 0; }
+.encouragement-heading {
+  display: flex;
+  align-items: center;
+  gap: 11px;
+  margin: 0 2px 12px;
+}
+.encouragement-heading-icon {
+  height: 38px;
+  width: 38px;
+  border-radius: 13px;
+  display: grid;
+  place-items: center;
+  color: #8068d9;
+  background: #eee9ff;
+}
+.encouragement-heading .eyebrow { margin-bottom: 2px; font-size: 10px; }
+.encouragement-heading h2 { margin: 0; color: #39334f; font-size: 15px; }
+.deck-count {
+  margin-right: auto;
+  padding: 6px 10px;
+  border: 1px solid #ece7f5;
+  border-radius: 20px;
+  background: rgba(255,255,255,.82);
+  color: #8b829e;
+  font-size: 10px;
+}
+.encouragement-card {
+  position: relative;
+  display: grid;
+  grid-template-columns: 132px minmax(0, 1fr);
+  align-items: center;
+  gap: 18px;
+  min-height: 178px;
+  padding: 19px 22px 0;
+  overflow: hidden;
+  border: 1px solid rgba(255,255,255,.94);
+  border-radius: 22px;
+  box-shadow: 0 13px 34px rgba(74,56,119,.075);
+  animation: card-arrive .32s ease both;
+}
+.card-rose { background: linear-gradient(112deg, #fff4f5 0%, #fff 58%, #fff9f1 100%); }
+.card-mint { background: linear-gradient(112deg, #edf9f2 0%, #fff 58%, #f5fbf8 100%); }
+.card-lavender { background: linear-gradient(112deg, #f1edff 0%, #fff 58%, #faf7ff 100%); }
+.card-peach { background: linear-gradient(112deg, #fff2e4 0%, #fff 58%, #fffbf5 100%); }
+.card-sunshine { background: linear-gradient(112deg, #fff8db 0%, #fff 58%, #fffaf1 100%); }
+.card-sky { background: linear-gradient(112deg, #eaf6ff 0%, #fff 58%, #f6fbff 100%); }
+.encouragement-art {
+  position: relative;
+  display: grid;
+  place-items: center;
+  width: 112px;
+  height: 112px;
+  border: 1px solid rgba(255,255,255,.92);
+  border-radius: 36px 31px 37px 30px;
+  background: radial-gradient(circle at 36% 30%, rgba(255,255,255,.98), rgba(255,255,255,.34) 65%), #f5eaff;
+  box-shadow: 0 10px 24px rgba(84,62,122,.08), inset 0 0 0 7px rgba(255,255,255,.35);
+  transform: rotate(-3deg);
+}
+.card-rose .encouragement-art { background-color: #f8dfe8; }
+.card-mint .encouragement-art { background-color: #dff2e7; }
+.card-lavender .encouragement-art { background-color: #e8e0ff; }
+.card-peach .encouragement-art { background-color: #ffe7d0; }
+.card-sunshine .encouragement-art { background-color: #ffedb5; }
+.card-sky .encouragement-art { background-color: #dcefff; }
+.encouragement-illustration {
+  position: relative;
+  z-index: 1;
+  font-size: 52px;
+  line-height: 1;
+  filter: drop-shadow(0 7px 5px rgba(74,56,119,.12));
+  animation: sticker-float 3.8s ease-in-out infinite;
+}
+.art-sparkle { position: absolute; z-index: 2; color: #c39bda; font-size: 17px; animation: twinkle 2.4s ease-in-out infinite; }
+.sparkle-a { top: 15px; right: 20px; }
+.sparkle-b { bottom: 19px; left: 17px; color: #dfa94e; animation-delay: .6s; }
+.sparkle-c { top: 40px; left: 17px; color: #ef91ab; font-size: 28px; }
+.encouragement-copy { min-width: 0; padding: 2px 0 14px; }
+.message-label { display: inline-flex; align-items: center; gap: 5px; margin-bottom: 5px; color: #8a72be; font-size: 9px; font-weight: 700; }
+.message-label svg { color: #9b85d2; }
+.encouragement-copy h3 { margin: 0 0 6px; color: #3b3453; font-size: 16px; }
+.hadith-quote, .encouragement-message { margin: 0; color: #554e68; font-size: 14px; font-weight: 700; line-height: 1.9; }
+.hadith-quote { color: #634ca4; font-size: 16px; }
+.encouragement-note { margin: 4px 0 0; color: #858097; font-size: 11px; line-height: 1.8; }
+.hadith-reference { display: inline-flex; align-items: center; gap: 4px; margin-top: 6px; color: #8777b0; font-size: 9px; }
+.hadith-reference:hover { color: #6048ad; text-decoration: underline; }
+.encouragement-footer {
+  grid-column: 1 / -1;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  min-height: 51px;
+  padding: 9px 0;
+  border-top: 1px solid rgba(113,94,145,.1);
+  color: #8b849c;
+  font-size: 10px;
+}
+.read-card-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  min-height: 35px;
+  padding: 0 12px;
+  border: 1px solid #e5dcfa;
+  border-radius: 12px;
+  background: rgba(255,255,255,.86);
+  color: #6d57b4;
+  font-size: 10px;
+  font-weight: 700;
+  white-space: nowrap;
+  transition: transform .18s ease, background .18s ease, box-shadow .18s ease;
+}
+.read-card-button:hover:not(:disabled) { transform: translateY(-1px); background: #fff; box-shadow: 0 5px 14px rgba(85,63,129,.1); }
+.read-card-button:disabled { opacity: .6; cursor: wait; }
+@keyframes sticker-float { 0%,100% { transform: translateY(0) rotate(2deg); } 50% { transform: translateY(-5px) rotate(-2deg); } }
+@keyframes card-arrive { from { opacity: .55; transform: translateY(5px); } to { opacity: 1; transform: translateY(0); } }
+@media (max-width: 520px) {
+  .encouragement-section { margin: 15px 0; }
+  .encouragement-card { grid-template-columns: 72px minmax(0,1fr); gap: 12px; padding: 14px 13px 0; border-radius: 18px; }
+  .encouragement-art { width: 68px; height: 68px; border-radius: 23px; box-shadow: 0 6px 16px rgba(84,62,122,.07), inset 0 0 0 4px rgba(255,255,255,.35); }
+  .encouragement-illustration { font-size: 34px; }
+  .art-sparkle { font-size: 12px; }
+  .sparkle-a { top: 7px; right: 10px; }
+  .sparkle-b { bottom: 9px; left: 9px; }
+  .sparkle-c { top: 26px; left: 8px; font-size: 18px; }
+  .encouragement-copy h3 { font-size: 13px; }
+  .hadith-quote, .encouragement-message { font-size: 12px; line-height: 1.8; }
+  .encouragement-note { font-size: 10px; }
+  .encouragement-footer { align-items: flex-start; flex-direction: column; gap: 8px; padding: 10px 0 12px; }
+  .read-card-button { width: 100%; min-height: 38px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .encouragement-card, .encouragement-illustration, .art-sparkle { animation: none; }
+}
+
 .parent-banner .welcome-copy,
 .child-banner .welcome-copy {
   max-width: min(600px, calc(100% - 170px));
