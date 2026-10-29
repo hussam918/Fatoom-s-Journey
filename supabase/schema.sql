@@ -80,6 +80,18 @@ create table if not exists public.reward_requests (
   reviewed_at timestamptz,
   reviewer_id uuid references auth.users(id) on delete set null
 );
+
+create table if not exists public.point_adjustments (
+  id uuid primary key default gen_random_uuid(),
+  family_id uuid not null references public.families(id) on delete cascade,
+  child_id uuid not null references public.profiles(user_id) on delete cascade,
+  points integer not null check (points between -2 and -1),
+  behavior text not null check (char_length(behavior) between 1 and 120),
+  created_by uuid not null references auth.users(id) on delete restrict,
+  created_at timestamptz not null default now()
+);
+create index if not exists point_adjustments_child_date_idx
+  on public.point_adjustments (child_id, created_at desc);
 create unique index if not exists one_pending_request_per_reward
   on public.reward_requests (reward_id, child_id) where status = 'pending';
 create index if not exists reward_requests_family_date_idx
@@ -90,7 +102,7 @@ do $$
 declare table_name text;
 begin
   if exists (select 1 from pg_publication where pubname = 'supabase_realtime') then
-    foreach table_name in array array['tasks', 'task_completions', 'rewards', 'reward_requests'] loop
+      foreach table_name in array array['tasks', 'task_completions', 'rewards', 'reward_requests', 'point_adjustments'] loop
       if not exists (
         select 1 from pg_publication_tables
         where pubname = 'supabase_realtime' and schemaname = 'public' and tablename = table_name
@@ -124,6 +136,7 @@ alter table public.tasks enable row level security;
 alter table public.task_completions enable row level security;
 alter table public.rewards enable row level security;
 alter table public.reward_requests enable row level security;
+alter table public.point_adjustments enable row level security;
 
 -- Remove any platform default grants before adding the minimum privileges
 -- required by this app. RLS policies below then constrain the accessible rows.
@@ -133,7 +146,8 @@ revoke all privileges on table
   public.tasks,
   public.task_completions,
   public.rewards,
-  public.reward_requests
+  public.reward_requests,
+  public.point_adjustments
 from public, anon, authenticated;
 
 grant select on public.families, public.profiles to authenticated;
@@ -141,6 +155,7 @@ grant select, insert, update on public.tasks to authenticated;
 grant select, insert, update on public.task_completions to authenticated;
 grant select, insert, update on public.rewards to authenticated;
 grant select, insert, update on public.reward_requests to authenticated;
+grant select, insert on public.point_adjustments to authenticated;
 
 drop policy if exists "family members can read their family" on public.families;
 create policy "family members can read their family" on public.families
@@ -149,6 +164,16 @@ create policy "family members can read their family" on public.families
 drop policy if exists "family members can read profiles" on public.profiles;
 create policy "family members can read profiles" on public.profiles
   for select to authenticated using (family_id = public.my_family_id());
+
+drop policy if exists "family members can read point adjustments" on public.point_adjustments;
+create policy "family members can read point adjustments" on public.point_adjustments
+  for select to authenticated using (family_id = public.my_family_id() and (public.my_role() = 'parent' or child_id = auth.uid()));
+drop policy if exists "parents can record child behavior points" on public.point_adjustments;
+create policy "parents can record child behavior points" on public.point_adjustments
+  for insert to authenticated with check (
+    family_id = public.my_family_id() and public.my_role() = 'parent' and created_by = auth.uid()
+    and exists (select 1 from public.profiles p where p.user_id = child_id and p.family_id = family_id and p.role = 'child')
+  );
 
 grant update (avatar_emoji) on public.profiles to authenticated;
 drop policy if exists "children can update their own avatar" on public.profiles;
@@ -241,7 +266,7 @@ revoke all on function public.protect_completion_review() from public, anon, aut
 create or replace function public.protect_reward_request()
 returns trigger language plpgsql security definer set search_path = public
 as $$
-declare cost integer; earned integer; spent integer;
+declare cost integer; earned integer; spent integer; adjusted integer;
 begin
   if tg_op = 'INSERT' then
     if new.child_id <> auth.uid() or public.my_role() <> 'child' then raise exception 'Only the child can request a reward'; end if;
@@ -249,7 +274,8 @@ begin
     if cost is null then raise exception 'Reward is unavailable'; end if;
     select coalesce(sum(stars_awarded), 0) into earned from public.task_completions where child_id = new.child_id and status = 'approved';
     select coalesce(sum(stars_cost), 0) into spent from public.reward_requests where child_id = new.child_id and status = 'approved';
-    if earned - spent < cost then raise exception 'Not enough stars'; end if;
+    select coalesce(sum(points), 0) into adjusted from public.point_adjustments where child_id = new.child_id;
+    if earned - spent + adjusted < cost then raise exception 'Not enough stars'; end if;
     new.stars_cost := cost; new.status := 'pending'; new.reviewer_id := null; new.reviewed_at := null;
     return new;
   end if;
@@ -259,7 +285,8 @@ begin
   if new.status = 'approved' then
     select coalesce(sum(stars_awarded), 0) into earned from public.task_completions where child_id = old.child_id and status = 'approved';
     select coalesce(sum(stars_cost), 0) into spent from public.reward_requests where child_id = old.child_id and status = 'approved';
-    if earned - spent < old.stars_cost then raise exception 'Not enough stars'; end if;
+    select coalesce(sum(points), 0) into adjusted from public.point_adjustments where child_id = old.child_id;
+    if earned - spent + adjusted < old.stars_cost then raise exception 'Not enough stars'; end if;
   end if;
   new.reviewer_id := auth.uid(); new.reviewed_at := now();
   return new;
