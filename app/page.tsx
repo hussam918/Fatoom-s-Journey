@@ -137,8 +137,9 @@ export default function HomePage() {
   const todayDone = new Set(myCompletions.filter((item) => item.task_date === today && item.status !== "rejected").map((item) => item.task_id));
   const approvedStars = myCompletions.filter((item) => item.status === "approved").reduce((sum, item) => sum + item.stars_awarded, 0);
   const spentStars = requests.filter((item) => item.status === "approved" && item.child_id === profile?.user_id).reduce((sum, item) => sum + item.stars_cost, 0);
-  const deductedPoints = pointAdjustments.filter((item) => item.child_id === profile?.user_id).reduce((sum, item) => sum - item.points, 0);
-  const starBalance = Math.max(0, approvedStars - spentStars - deductedPoints);
+  const totalDeductedPoints = pointAdjustments.filter((item) => item.child_id === profile?.user_id).reduce((sum, item) => sum - item.points, 0);
+  const remainingNegativePoints = Math.max(0, totalDeductedPoints - Math.max(0, approvedStars - spentStars));
+  const starBalance = Math.max(0, approvedStars - spentStars - totalDeductedPoints);
   const pendingReviews = profile?.role === "parent" ? completions.filter((item) => item.status === "pending") : [];
   const pendingRequests = profile?.role === "parent" ? requests.filter((item) => item.status === "pending") : [];
   const myPendingRequests = requests.filter((item) => item.child_id === profile?.user_id && item.status === "pending");
@@ -275,7 +276,12 @@ export default function HomePage() {
     const deducted = pointAdjustments.filter((item) => item.child_id === childId).reduce((sum, item) => sum - item.points, 0);
     return Math.max(0, earned - spent - deducted);
   };
-  const childDeductions = (childId: string) => pointAdjustments.filter((item) => item.child_id === childId).reduce((sum, item) => sum - item.points, 0);
+  const childDeductions = (childId: string) => {
+    const earned = completions.filter((item) => item.child_id === childId && item.status === "approved").reduce((sum, item) => sum + item.stars_awarded, 0);
+    const spent = requests.filter((item) => item.child_id === childId && item.status === "approved").reduce((sum, item) => sum + item.stars_cost, 0);
+    const deducted = pointAdjustments.filter((item) => item.child_id === childId).reduce((sum, item) => sum - item.points, 0);
+    return Math.max(0, deducted - Math.max(0, earned - spent));
+  };
   if (!configured) return <SetupScreen />;
   if (loading) return <div className="screen-center"><div className="loading-mark"><Sparkles size={24} /></div><p>نجهز عالم فاطمة...</p></div>;
   if (!sessionUser) return <LoginScreen mode={loginMode} setMode={(mode) => { setLoginMode(mode); setPassword(""); setNotice(null); }} email={email} setEmail={setEmail} password={password} setPassword={setPassword} onSubmit={signIn} notice={notice} busy={busy} />;
@@ -302,7 +308,7 @@ export default function HomePage() {
           {notice && <div className={`notice ${notice.kind}`}><span>{notice.text}</span><button aria-label="إغلاق" onClick={() => setNotice(null)}><X size={16} /></button></div>}
           {activeTab === "home" && (profile.role === "parent"
             ? <ParentHome family={family} profile={profile} familyChildren={children} completions={completions} tasks={tasks} pendingReviews={pendingReviews} pendingRequests={pendingRequests} pointAdjustments={pointAdjustments} taskMap={taskMap} rewardMap={rewardMap} childMap={childMap} childStars={childStars} childDeductions={childDeductions} onReviewCompletion={reviewCompletion} onReviewReward={reviewReward} onRecordBehavior={recordBehaviorPoint} />
-            : <ChildHome profile={profile} greeting={greeting} tasks={tasks} completions={myCompletions} todayDone={todayDone} rewards={rewards} requests={myPendingRequests} starBalance={starBalance} approvedStars={approvedStars} deductedPoints={deductedPoints} progress={progress} busy={busy} onSubmitTask={submitTask} onRequestReward={requestReward} />)}
+            : <ChildHome profile={profile} greeting={greeting} tasks={tasks} completions={myCompletions} todayDone={todayDone} rewards={rewards} requests={myPendingRequests} starBalance={starBalance} approvedStars={approvedStars} deductedPoints={remainingNegativePoints} progress={progress} busy={busy} onSubmitTask={submitTask} onRequestReward={requestReward} />)}
           {activeTab === "tasks" && <section className="section-block"><div className="section-heading"><div><p className="eyebrow">{profile.role === "parent" ? "إدارة الروتين" : "خطوات يومي"}</p><h1>{profile.role === "parent" ? "مهام فاطمة" : "مهامي اليوم"}</h1><p className="section-subtitle">{profile.role === "parent" ? "أضف مهامًا صغيرة تصنع فرقًا كبيرًا." : "كل مهمة تنجزينها تقربك من مكافأتك."}</p></div><span className="heading-icon lavender"><BookOpenCheck size={23} /></span></div>
             <div className="task-layout"><div className="task-list">{tasks.length ? tasks.map((task) => <TaskRow key={task.id} task={task} child={profile.role === "child"} todayDone={todayDone.has(task.id)} completion={myCompletions.find((item) => item.task_id === task.id && item.task_date === today)} onSubmit={() => submitTask(task)} onEdit={() => beginEditTask(task)} onDelete={() => removeTask(task.id)} busy={busy} />) : <EmptyState icon={<BookOpenCheck />} title="ما فيه مهام مضافة" text="أضفوا أول مهمة عشان تبدأ رحلة الإنجاز." />}</div>
               {profile.role === "parent" && <form className="form-card compact-form" onSubmit={addTask}><div className="form-title"><span className="form-icon pink">{editingTaskId ? <Pencil size={17} /> : <Plus size={18} />}</span><div><h3>{editingTaskId ? "تعديل المهمة" : "مهمة جديدة"}</h3><p>خلوها واضحة ومناسبة لعمر فاطمة.</p></div></div><label>اسم المهمة<input required maxLength={80} value={taskTitle} onChange={(e) => setTaskTitle(e.target.value)} placeholder="مثال: ترتيب الألعاب" /></label><label>تفاصيل بسيطة<textarea rows={2} maxLength={180} value={taskDescription} onChange={(e) => setTaskDescription(e.target.value)} placeholder="وش المطلوب؟" /></label><div className="form-row"><label>النجوم<input type="number" required min="1" max="100" value={taskStars} onChange={(e) => setTaskStars(e.target.value)} /></label><label>التكرار<select value={taskCadence} onChange={(e) => setTaskCadence(e.target.value as "daily" | "once")}><option value="daily">يومي</option><option value="once">مرة واحدة</option></select></label></div><button className="primary-button full-button" type="submit">{editingTaskId ? "حفظ التعديلات" : <><Plus size={17} />إضافة المهمة</>}</button>{editingTaskId && <button className="cancel-edit" type="button" onClick={() => { setEditingTaskId(null); setTaskTitle(""); setTaskDescription(""); }}>إلغاء التعديل</button>}</form>}
