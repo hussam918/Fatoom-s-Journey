@@ -15,8 +15,17 @@ create table if not exists public.profiles (
   family_id uuid not null references public.families(id) on delete cascade,
   role text not null check (role in ('parent', 'child')),
   display_name text not null,
+  avatar_emoji text not null default '🌸',
   created_at timestamptz not null default now()
 );
+
+alter table public.profiles add column if not exists avatar_emoji text not null default '🌸';
+do $$ begin
+  if not exists (select 1 from pg_constraint where conname = 'profiles_avatar_emoji_check' and conrelid = 'public.profiles'::regclass) then
+    alter table public.profiles add constraint profiles_avatar_emoji_check
+      check (avatar_emoji in ('🌸','🐰','🦊','🐱','🐼','🦄','🐸','🐥','🐻','🦋','🐨','🐙','🐹'));
+  end if;
+end $$;
 
 create table if not exists public.tasks (
   id uuid primary key default gen_random_uuid(),
@@ -140,6 +149,12 @@ create policy "family members can read their family" on public.families
 drop policy if exists "family members can read profiles" on public.profiles;
 create policy "family members can read profiles" on public.profiles
   for select to authenticated using (family_id = public.my_family_id());
+
+grant update (avatar_emoji) on public.profiles to authenticated;
+drop policy if exists "children can update their own avatar" on public.profiles;
+create policy "children can update their own avatar" on public.profiles
+  for update to authenticated using (user_id = auth.uid() and role = 'child')
+  with check (user_id = auth.uid() and role = 'child');
 
 drop policy if exists "members can read active family tasks" on public.tasks;
 create policy "members can read active family tasks" on public.tasks
