@@ -15,6 +15,7 @@ const weekdayNames = ["الأحد", "الإثنين", "الثلاثاء", "ال�
 // This is the dedicated Supabase Auth identity for Fatima. The six-digit PIN is
 // her password; keeping a separate Auth user preserves the database's child RLS role.
 const CHILD_LOGIN_EMAIL = "fatima@fatoom-s-journey.app";
+const CHILD_AVATARS = ["🌸", "🐰", "🦊", "🐱", "🐼", "🦄", "🐸", "🐥", "🐻", "🦋", "🐨", "🐙", "🐹"];
 const toLocalDate = (date = new Date()) => {
   const y = date.getFullYear();
   const m = String(date.getMonth() + 1).padStart(2, "0");
@@ -40,6 +41,8 @@ export default function HomePage() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [loginMode, setLoginMode] = useState<"child" | "parent">("child");
+  const [avatarPickerOpen, setAvatarPickerOpen] = useState(false);
+  const [avatarSaving, setAvatarSaving] = useState(false);
   const [taskTitle, setTaskTitle] = useState("");
   const [taskDescription, setTaskDescription] = useState("");
   const [taskStars, setTaskStars] = useState("2");
@@ -56,7 +59,7 @@ export default function HomePage() {
     setBusy(true);
     try {
       const { data: myProfile, error: profileError } = await supabase.from("profiles")
-        .select("user_id,family_id,role,display_name").eq("user_id", userId).single();
+        .select("user_id,family_id,role,display_name,avatar_emoji").eq("user_id", userId).single();
       if (profileError) throw new Error("تم تسجيل الدخول، لكن الحساب لم يُربط بالعائلة بعد. أكمل خطوة ربط الحسابين في README.md.");
       const typedProfile = myProfile as Profile;
       setProfile(typedProfile);
@@ -80,7 +83,7 @@ export default function HomePage() {
 
       if (typedProfile.role === "parent") {
         const { data: people, error: peopleError } = await supabase.from("profiles")
-          .select("user_id,family_id,role,display_name").eq("family_id", typedProfile.family_id).eq("role", "child");
+          .select("user_id,family_id,role,display_name,avatar_emoji").eq("family_id", typedProfile.family_id).eq("role", "child");
         if (peopleError) throw peopleError;
         setChildren((people ?? []) as Profile[]);
       }
@@ -154,6 +157,20 @@ export default function HomePage() {
     if (!supabase) return;
     await supabase.auth.signOut();
     setNotice(null);
+  }
+
+  async function saveChildAvatar(avatar: string) {
+    if (!supabase || !profile || profile.role !== "child" || avatarSaving) return;
+    setAvatarSaving(true);
+    const { error } = await supabase.from("profiles").update({ avatar_emoji: avatar }).eq("user_id", profile.user_id);
+    setAvatarSaving(false);
+    if (error) {
+      setNotice({ kind: "error", text: "ما قدرنا نحفظ الصورة الآن. حاولي مرة ثانية." });
+      return;
+    }
+    setProfile({ ...profile, avatar_emoji: avatar });
+    setAvatarPickerOpen(false);
+    setNotice({ kind: "success", text: "حفظنا شخصيتك الجديدة!" });
   }
 
   async function addTask(event: FormEvent<HTMLFormElement>) {
@@ -261,7 +278,7 @@ export default function HomePage() {
       </aside>
 
       <section className="main-column">
-        <header className="topbar"><div className="breadcrumbs"><span>رحلة فاطمة</span><ChevronLeft size={15} /><b>{profile.role === "parent" ? "لوحة ولي الأمر" : "مساحتي"}</b></div><div className="topbar-actions"><span className="connection-chip"><span />متصل بالعائلة</span><button className="icon-button" aria-label="تحديث البيانات" onClick={() => loadData(profile.user_id)}><RefreshCw size={18} /></button><button className="topbar-logout" type="button" onClick={signOut} title="تسجيل الخروج"><LogOut size={16} /><span>خروج</span></button><div className="top-avatar">{profile.display_name.slice(0, 1)}</div></div></header>
+        <header className="topbar"><div className="breadcrumbs"><span>رحلة فاطمة</span><ChevronLeft size={15} /><b>{profile.role === "parent" ? "لوحة ولي الأمر" : "مساحتي"}</b></div><div className="topbar-actions"><span className="connection-chip"><span />متصل بالعائلة</span><button className="icon-button" aria-label="تحديث البيانات" onClick={() => loadData(profile.user_id)}><RefreshCw size={18} /></button><button className="topbar-logout" type="button" onClick={signOut} title="تسجيل الخروج"><LogOut size={16} /><span>خروج</span></button>{profile.role === "child" ? <div className="avatar-control"><button className="top-avatar child-avatar" type="button" onClick={() => setAvatarPickerOpen((open) => !open)} aria-label="تغيير الصورة الرمزية" aria-expanded={avatarPickerOpen} title="اضغطي لتغيير صورتك">{profile.avatar_emoji || "🌸"}<span className="avatar-edit-badge"><Pencil size={10} /></span></button>{avatarPickerOpen && <div className="avatar-picker" role="dialog" aria-label="اختاري صورتك الرمزية"><b>اختاري شخصيتك</b><span>تقدرين تغيرينها بأي وقت</span><div className="avatar-choice-grid">{CHILD_AVATARS.map((avatar) => <button key={avatar} type="button" className={profile.avatar_emoji === avatar ? "avatar-choice selected" : "avatar-choice"} aria-label={`اختيار ${avatar}`} aria-pressed={profile.avatar_emoji === avatar} disabled={avatarSaving} onClick={() => void saveChildAvatar(avatar)}>{avatar}</button>)}</div>{avatarSaving && <small>جارٍ الحفظ...</small>}</div>}</div> : <div className="top-avatar">{profile.display_name.slice(0, 1)}</div>}</div></header>
         <div className="page-content">
           {notice && <div className={`notice ${notice.kind}`}><span>{notice.text}</span><button aria-label="إغلاق" onClick={() => setNotice(null)}><X size={16} /></button></div>}
           {activeTab === "home" && (profile.role === "parent"
