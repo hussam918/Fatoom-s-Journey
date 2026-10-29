@@ -7,6 +7,7 @@ export type Profile = {
   family_id: string;
   role: Role;
   display_name: string;
+  avatar_emoji: string;
 };
 
 export type Task = {
