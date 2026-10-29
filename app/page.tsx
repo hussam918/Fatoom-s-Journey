@@ -16,6 +16,8 @@ const weekdayNames = ["الأحد", "الإثنين", "الثلاثاء", "ال�
 // her password; keeping a separate Auth user preserves the database's child RLS role.
 const CHILD_LOGIN_EMAIL = "fatima@fatoom-s-journey.app";
 const CHILD_AVATARS = ["🌸", "🐰", "🦊", "🐱", "🐼", "🦄", "🐸", "🐥", "🐻", "🦋", "🐨", "🐙", "🐹"];
+const DAILY_PRAYER_TASKS = ["صلاة الفجر", "صلاة الظهر", "صلاة العصر", "صلاة المغرب", "صلاة العشاء"];
+const prayerTaskSetupInProgress = new Set<string>();
 const ENCOURAGEMENT_CARDS = [
   { id: "kindness", kind: "hadith", title: "الكلمة الطيبة", message: "«الكلمة الطيبة صدقة»", note: "كلمة حلوة منك ممكن تفرّح قلب أحد!", art: "💌", tone: "rose", reference: "الحديث ٢٦ من الأربعين النووية", source: "https://sunnah.com/nawawi40/26" },
   { id: "small-steps", kind: "encouragement", title: "خطوة صغيرة تكفي", message: "مو لازم تسوين كل شيء مرة وحدة. خطوة حلوة اليوم تصير إنجازًا كبيرًا مع الوقت.", note: "خذيها خطوة خطوة يا بطلة.", art: "🌱", tone: "mint" },
@@ -27,6 +29,10 @@ const ENCOURAGEMENT_CARDS = [
   { id: "proud", kind: "encouragement", title: "أنا فخورة بمحاولتك", message: "كل مرة تساعدين فيها أو ترتبين شيئًا، أنتِ تكبرين وتتعلمين.", note: "كمّلي، أنتِ قدّها!", art: "⭐", tone: "sunshine" },
   { id: "love-for-others", kind: "hadith", title: "نحب الخير لبعض", message: "«حتى يحب لأخيه ما يحب لنفسه»", note: "شاركي اللطف والفرح مع اللي حولك.", art: "🧸", tone: "peach", reference: "الحديث ١٣ من الأربعين النووية", source: "https://sunnah.com/nawawi40/13" },
   { id: "mistakes", kind: "encouragement", title: "الاعتذار قوة", message: "إذا زعل أحد من تصرفك، كلمة «آسفة» ومحاولة جديدة تصلّح أشياء كثيرة.", note: "كلنا نتعلم، وكلنا نقدر نبدأ من جديد.", art: "💖", tone: "lavender" },
+  { id: "prayer-light", kind: "hadith", title: "الصلاة نور", message: "«والصلاة نور»", note: "كل صلاة لحظة جميلة تقرّبك من الله وتنير قلبك.", art: "🕌", tone: "sky", reference: "الحديث ٢٣ من الأربعين النووية", source: "https://sunnah.com/nawawi40/23" },
+  { id: "parents-kindness", kind: "quran", title: "الإحسان للوالدين", message: "«وَبِالْوَالِدَيْنِ إِحْسَانًا»", note: "الكلمة الطيبة والمساعدة الصغيرة تسعد ماما وبابا.", art: "🫶", tone: "rose", reference: "سورة الإسراء، الآية ٢٣", source: "https://quran.com/ar/al-isra/23" },
+  { id: "parents-prayer", kind: "quran", title: "دعوة حلوة لماما وبابا", message: "«وَقُلْ رَبِّ ارْحَمْهُمَا كَمَا رَبَّيَانِي صَغِيرًا»", note: "تقدرين تدعين لماما وبابا بهذا الدعاء الجميل.", art: "💗", tone: "peach", reference: "سورة الإسراء، الآية ٢٤", source: "https://quran.com/ar/al-isra/24" },
+  { id: "beautiful-manners", kind: "encouragement", title: "أخلاقي الجميلة", message: "أسمع للآخرين، أتكلم بلطف، وأعتذر إذا أخطأت.", note: "الأدب والاحترام زينة لقلبك وكلامك.", art: "🌷", tone: "mint" },
 ];
 const toLocalDate = (date = new Date()) => {
   const y = date.getFullYear();
@@ -90,7 +96,45 @@ export default function HomePage() {
       ]);
       const queryError = taskResult.error || completionResult.error || rewardResult.error || requestResult.error || pointResult.error;
       if (queryError) throw queryError;
-      setTasks((taskResult.data ?? []) as Task[]);
+      let familyTasks = (taskResult.data ?? []) as Task[];
+      if (typedProfile.role === "parent" && !prayerTaskSetupInProgress.has(typedProfile.family_id)) {
+        prayerTaskSetupInProgress.add(typedProfile.family_id);
+        try {
+          // Recheck after taking the per-tab lock so simultaneous loads remain idempotent.
+          const { data: latestTasks, error: latestTasksError } = await supabase.from("tasks")
+            .select("*").eq("family_id", typedProfile.family_id).eq("active", true);
+          if (latestTasksError) throw latestTasksError;
+          familyTasks = (latestTasks ?? []) as Task[];
+          const existingPrayerNames = new Set(familyTasks.map((task) => task.title.trim()));
+          const missingPrayerTasks = DAILY_PRAYER_TASKS
+            .filter((title) => !existingPrayerNames.has(title))
+            .map((title) => ({
+              family_id: typedProfile.family_id,
+              title,
+              description: "مهمة يومية · أرسليها للمراجعة بعد الصلاة.",
+              stars: 1,
+              cadence: "daily" as const,
+              created_by: typedProfile.user_id,
+            }));
+          if (missingPrayerTasks.length) {
+            const { data: insertedPrayerTasks, error: insertPrayerError } = await supabase.from("tasks")
+              .insert(missingPrayerTasks).select("*");
+            if (insertPrayerError) throw insertPrayerError;
+            familyTasks = [...familyTasks, ...((insertedPrayerTasks ?? []) as Task[])];
+          }
+          // Retire the former all-in-one task while keeping its completion history intact.
+          const legacyPrayerTask = familyTasks.find((task) => task.title.trim() === "الصلاة في وقتها");
+          if (legacyPrayerTask) {
+            const { error: retirePrayerError } = await supabase.from("tasks")
+              .update({ active: false }).eq("id", legacyPrayerTask.id);
+            if (retirePrayerError) throw retirePrayerError;
+            familyTasks = familyTasks.filter((task) => task.id !== legacyPrayerTask.id);
+          }
+        } finally {
+          prayerTaskSetupInProgress.delete(typedProfile.family_id);
+        }
+      }
+      setTasks(familyTasks);
       setCompletions((completionResult.data ?? []) as Completion[]);
       setRewards((rewardResult.data ?? []) as Reward[]);
       setRequests((requestResult.data ?? []) as RewardRequest[]);
@@ -474,11 +518,11 @@ function EncouragementDeck({ userId }: { userId: string }) {
     <article className={`encouragement-card card-${card.tone}`}>
       <div className="encouragement-art" aria-hidden="true"><span className="art-sparkle sparkle-a">✦</span><span className="art-sparkle sparkle-b">✧</span><span className="art-sparkle sparkle-c">·</span><span className="encouragement-illustration">{card.art}</span></div>
       <div className="encouragement-copy">
-        <div className="message-label">{card.kind === "hadith" ? <><BookOpenCheck size={13} />حديث نبوي</> : <><Heart size={13} />كلام يفرّحك</>}</div>
+        <div className="message-label">{card.kind === "hadith" ? <><BookOpenCheck size={13} />حديث نبوي</> : card.kind === "quran" ? <><BookOpenCheck size={13} />من القرآن الكريم</> : <><Heart size={13} />كلام يفرّحك</>}</div>
         <h3>{card.title}</h3>
-        <p className={card.kind === "hadith" ? "hadith-quote" : "encouragement-message"}>{card.message}</p>
+        <p className={card.kind === "hadith" || card.kind === "quran" ? "hadith-quote" : "encouragement-message"}>{card.message}</p>
         <p className="encouragement-note">{card.note}</p>
-        {card.kind === "hadith" && <a className="hadith-reference" href={card.source} target="_blank" rel="noreferrer">{card.reference} · اقرئيه كاملًا <ArrowLeft size={13} /></a>}
+        {(card.kind === "hadith" || card.kind === "quran") && <a className="hadith-reference" href={card.source} target="_blank" rel="noreferrer">{card.reference} · اقرئيه كاملًا <ArrowLeft size={13} /></a>}
       </div>
       <div className="encouragement-footer"><span>{finishedRound ? "يا سلام! مرّت عليك كل البطاقات 💫" : `قرأتِ ${deck.readCount} من ${ENCOURAGEMENT_CARDS.length} رسائل في هذه الجولة`}</span><button type="button" className="read-card-button" onClick={readCard} disabled={!ready}><Check size={16} />{finishedRound ? "ابدئي جولة جديدة" : "قرأتُها، التالية!"}<ChevronLeft size={16} /></button></div>
     </article>
