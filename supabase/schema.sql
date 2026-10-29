@@ -116,6 +116,17 @@ alter table public.task_completions enable row level security;
 alter table public.rewards enable row level security;
 alter table public.reward_requests enable row level security;
 
+-- Remove any platform default grants before adding the minimum privileges
+-- required by this app. RLS policies below then constrain the accessible rows.
+revoke all privileges on table
+  public.families,
+  public.profiles,
+  public.tasks,
+  public.task_completions,
+  public.rewards,
+  public.reward_requests
+from public, anon, authenticated;
+
 grant select on public.families, public.profiles to authenticated;
 grant select, insert, update on public.tasks to authenticated;
 grant select, insert, update on public.task_completions to authenticated;
@@ -210,6 +221,7 @@ end $$;
 drop trigger if exists protect_completion_review on public.task_completions;
 create trigger protect_completion_review before insert or update on public.task_completions
   for each row execute function public.protect_completion_review();
+revoke all on function public.protect_completion_review() from public, anon, authenticated;
 
 create or replace function public.protect_reward_request()
 returns trigger language plpgsql security definer set search_path = public
@@ -241,6 +253,7 @@ end $$;
 drop trigger if exists protect_reward_request on public.reward_requests;
 create trigger protect_reward_request before insert or update on public.reward_requests
   for each row execute function public.protect_reward_request();
+revoke all on function public.protect_reward_request() from public, anon, authenticated;
 
 -- One-time family setup, after creating the two email/password users under
 -- Supabase Dashboard > Authentication > Users. Replace both UUID placeholders.
