@@ -261,7 +261,7 @@ export default function HomePage() {
       </aside>
 
       <section className="main-column">
-        <header className="topbar"><div className="breadcrumbs"><span>رحلة فاطمة</span><ChevronLeft size={15} /><b>{profile.role === "parent" ? "لوحة ولي الأمر" : "مساحتي"}</b></div><div className="topbar-actions"><span className="connection-chip"><span />متصل بالعائلة</span><button className="icon-button" aria-label="تحديث البيانات" onClick={() => loadData(profile.user_id)}><RefreshCw size={18} /></button><div className="top-avatar">{profile.display_name.slice(0, 1)}</div></div></header>
+        <header className="topbar"><div className="breadcrumbs"><span>رحلة فاطمة</span><ChevronLeft size={15} /><b>{profile.role === "parent" ? "لوحة ولي الأمر" : "مساحتي"}</b></div><div className="topbar-actions"><span className="connection-chip"><span />متصل بالعائلة</span><button className="icon-button" aria-label="تحديث البيانات" onClick={() => loadData(profile.user_id)}><RefreshCw size={18} /></button><button className="topbar-logout" type="button" onClick={signOut} title="تسجيل الخروج"><LogOut size={16} /><span>خروج</span></button><div className="top-avatar">{profile.display_name.slice(0, 1)}</div></div></header>
         <div className="page-content">
           {notice && <div className={`notice ${notice.kind}`}><span>{notice.text}</span><button aria-label="إغلاق" onClick={() => setNotice(null)}><X size={16} /></button></div>}
           {activeTab === "home" && (profile.role === "parent"
