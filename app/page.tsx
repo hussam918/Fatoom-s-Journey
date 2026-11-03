@@ -7,7 +7,7 @@ import {
   Sparkles, Star, Trash2, Trophy, X,
 } from "lucide-react";
 import { getSupabase } from "@/lib/supabase";
-import type { Completion, Family, PointAdjustment, Profile, Reward, RewardRequest, Task } from "@/lib/types";
+import type { Completion, Family, PointAdjustment, Profile, Reward, RewardRequest, Task, WishRequest } from "@/lib/types";
 
 type Notice = { kind: "success" | "error"; text: string } | null;
 
@@ -52,6 +52,9 @@ export default function HomePage() {
   const [completions, setCompletions] = useState<Completion[]>([]);
   const [rewards, setRewards] = useState<Reward[]>([]);
   const [requests, setRequests] = useState<RewardRequest[]>([]);
+  const [wishes, setWishes] = useState<WishRequest[]>([]);
+  const [wishText, setWishText] = useState("");
+  const [wishCost, setWishCost] = useState("20");
   const [pointAdjustments, setPointAdjustments] = useState<PointAdjustment[]>([]);
   const [children, setChildren] = useState<Profile[]>([]);
   const [loading, setLoading] = useState(true);
@@ -87,15 +90,17 @@ export default function HomePage() {
       if (familyError) throw familyError;
       setFamily(familyRow as Family);
 
-      const [taskResult, completionResult, rewardResult, requestResult, pointResult] = await Promise.all([
+      const [taskResult, completionResult, rewardResult, requestResult, wishResult, pointResult] = await Promise.all([
         supabase.from("tasks").select("*").eq("family_id", typedProfile.family_id).eq("active", true).order("created_at", { ascending: true }),
         supabase.from("task_completions").select("*").eq("family_id", typedProfile.family_id).order("submitted_at", { ascending: false }).limit(100),
         supabase.from("rewards").select("*").eq("family_id", typedProfile.family_id).eq("active", true).order("stars_cost", { ascending: true }),
         supabase.from("reward_requests").select("*").eq("family_id", typedProfile.family_id).order("requested_at", { ascending: false }).limit(100),
+        supabase.from("wish_requests").select("*").eq("family_id", typedProfile.family_id).order("requested_at", { ascending: false }).limit(100),
         supabase.from("point_adjustments").select("*").eq("family_id", typedProfile.family_id).order("created_at", { ascending: false }).limit(100),
       ]);
-      const queryError = taskResult.error || completionResult.error || rewardResult.error || requestResult.error || pointResult.error;
-      if (queryError) throw queryError;
+      const queryError = taskResult.error || completionResult.error || rewardResult.error || requestResult.error || wishResult.error || pointResult.error;
+      const wishTableMissing = wishResult.error?.code === "42P01" || wishResult.error?.code === "PGRST205";
+      if (queryError && !wishTableMissing) throw queryError;
       let familyTasks = (taskResult.data ?? []) as Task[];
       if (typedProfile.role === "parent" && !prayerTaskSetupInProgress.has(typedProfile.family_id)) {
         prayerTaskSetupInProgress.add(typedProfile.family_id);
@@ -138,6 +143,7 @@ export default function HomePage() {
       setCompletions((completionResult.data ?? []) as Completion[]);
       setRewards((rewardResult.data ?? []) as Reward[]);
       setRequests((requestResult.data ?? []) as RewardRequest[]);
+      setWishes((wishTableMissing ? [] : wishResult.data ?? []) as WishRequest[]);
       setPointAdjustments((pointResult.data ?? []) as PointAdjustment[]);
 
       if (typedProfile.role === "parent") {
@@ -183,6 +189,7 @@ export default function HomePage() {
       .on("postgres_changes", { event: "*", schema: "public", table: "task_completions", filter: `family_id=eq.${profile.family_id}` }, () => void loadData(profile.user_id))
       .on("postgres_changes", { event: "*", schema: "public", table: "rewards", filter: `family_id=eq.${profile.family_id}` }, () => void loadData(profile.user_id))
       .on("postgres_changes", { event: "*", schema: "public", table: "reward_requests", filter: `family_id=eq.${profile.family_id}` }, () => void loadData(profile.user_id))
+      .on("postgres_changes", { event: "*", schema: "public", table: "wish_requests", filter: `family_id=eq.${profile.family_id}` }, () => void loadData(profile.user_id))
       .on("postgres_changes", { event: "*", schema: "public", table: "point_adjustments", filter: `family_id=eq.${profile.family_id}` }, () => void loadData(profile.user_id))
       .subscribe();
     return () => { void supabase.removeChannel(channel); };
@@ -192,13 +199,15 @@ export default function HomePage() {
   const myCompletions = useMemo(() => profile ? completions.filter((item) => item.child_id === profile.user_id) : [], [completions, profile]);
   const todayDone = new Set(myCompletions.filter((item) => item.task_date === today && item.status !== "rejected").map((item) => item.task_id));
   const approvedStars = myCompletions.filter((item) => item.status === "approved").reduce((sum, item) => sum + item.stars_awarded, 0);
-  const spentStars = requests.filter((item) => item.status === "approved" && item.child_id === profile?.user_id).reduce((sum, item) => sum + item.stars_cost, 0);
+  const spentStars = requests.filter((item) => item.status === "approved" && item.child_id === profile?.user_id).reduce((sum, item) => sum + item.stars_cost, 0) + wishes.filter((item) => item.status === "approved" && item.child_id === profile?.user_id).reduce((sum, item) => sum + item.stars_cost, 0);
   const totalDeductedPoints = pointAdjustments.filter((item) => item.child_id === profile?.user_id).reduce((sum, item) => sum - item.points, 0);
   const remainingNegativePoints = Math.max(0, totalDeductedPoints - Math.max(0, approvedStars - spentStars));
   const starBalance = Math.max(0, approvedStars - spentStars - totalDeductedPoints);
   const pendingReviews = profile?.role === "parent" ? completions.filter((item) => item.status === "pending") : [];
   const pendingRequests = profile?.role === "parent" ? requests.filter((item) => item.status === "pending") : [];
   const myPendingRequests = requests.filter((item) => item.child_id === profile?.user_id && item.status === "pending");
+  const pendingWishes = profile?.role === "parent" ? wishes.filter((item) => item.status === "pending") : [];
+  const myWishes = wishes.filter((item) => item.child_id === profile?.user_id);
   const approvedToday = myCompletions.filter((item) => item.task_date === today && item.status === "approved").length;
   const progress = tasks.length ? Math.round((approvedToday / tasks.length) * 100) : 0;
   const greeting = new Intl.DateTimeFormat("ar-SA", { weekday: "long", day: "numeric", month: "long" }).format(new Date());
@@ -323,6 +332,23 @@ export default function HomePage() {
     else { setNotice({ kind: "success", text: status === "approved" ? "تم اعتماد المكافأة." : "تم رفض الطلب." }); await loadData(profile.user_id); }
   }
 
+  async function submitWish(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (!supabase || !profile || profile.role !== "child") return;
+    const cost = Number(wishCost);
+    if (starBalance < 20 || cost < 20 || cost > starBalance || myWishes.some((item) => item.status === "pending")) return;
+    const { error } = await supabase.from("wish_requests").insert({ family_id: profile.family_id, child_id: profile.user_id, wish: wishText.trim(), stars_cost: cost });
+    if (error) setNotice({ kind: "error", text: error.message.includes("stars") ? "رصيد نجومك ما يكفي لهذه الأمنية." : error.message });
+    else { setWishText(""); setNotice({ kind: "success", text: "وصلت أمنيتك لولي الأمر للمراجعة!" }); await loadData(profile.user_id); }
+  }
+
+  async function reviewWish(item: WishRequest, status: "approved" | "rejected") {
+    if (!supabase || !profile || profile.role !== "parent") return;
+    const { error } = await supabase.from("wish_requests").update({ status }).eq("id", item.id);
+    if (error) setNotice({ kind: "error", text: error.message.includes("stars") ? "الرصيد الحالي ما يكفي لاعتماد الأمنية." : error.message });
+    else { setNotice({ kind: "success", text: status === "approved" ? `تم اعتماد الأمنية وخصم ${item.stars_cost} نجمة.` : "تم رفض الأمنية، ونجوم فاطمة لم تتغير." }); await loadData(profile.user_id); }
+  }
+
   const taskMap = useMemo(() => new Map(tasks.map((item) => [item.id, item])), [tasks]);
   const rewardMap = useMemo(() => new Map(rewards.map((item) => [item.id, item])), [rewards]);
   const childMap = useMemo(() => new Map(children.map((item) => [item.user_id, item])), [children]);
@@ -363,8 +389,8 @@ export default function HomePage() {
         <div className="page-content">
           {notice && <div className={`notice ${notice.kind}`}><span>{notice.text}</span><button aria-label="إغلاق" onClick={() => setNotice(null)}><X size={16} /></button></div>}
           {activeTab === "home" && (profile.role === "parent"
-            ? <ParentHome family={family} profile={profile} familyChildren={children} completions={completions} tasks={tasks} pendingReviews={pendingReviews} pendingRequests={pendingRequests} pointAdjustments={pointAdjustments} taskMap={taskMap} rewardMap={rewardMap} childMap={childMap} childStars={childStars} childDeductions={childDeductions} onReviewCompletion={reviewCompletion} onReviewReward={reviewReward} onRecordBehavior={recordBehaviorPoint} />
-            : <ChildHome profile={profile} greeting={greeting} tasks={tasks} completions={myCompletions} todayDone={todayDone} rewards={rewards} requests={myPendingRequests} starBalance={starBalance} approvedStars={approvedStars} deductedPoints={remainingNegativePoints} progress={progress} busy={busy} onSubmitTask={submitTask} onRequestReward={requestReward} />)}
+            ? <ParentHome family={family} profile={profile} familyChildren={children} completions={completions} tasks={tasks} pendingReviews={pendingReviews} pendingRequests={pendingRequests} pendingWishes={pendingWishes} pointAdjustments={pointAdjustments} taskMap={taskMap} rewardMap={rewardMap} childMap={childMap} childStars={childStars} childDeductions={childDeductions} onReviewCompletion={reviewCompletion} onReviewReward={reviewReward} onReviewWish={reviewWish} onRecordBehavior={recordBehaviorPoint} />
+            : <ChildHome profile={profile} greeting={greeting} tasks={tasks} completions={myCompletions} todayDone={todayDone} rewards={rewards} requests={myPendingRequests} wishes={myWishes} wishText={wishText} setWishText={setWishText} wishCost={wishCost} setWishCost={setWishCost} onSubmitWish={submitWish} starBalance={starBalance} approvedStars={approvedStars} deductedPoints={remainingNegativePoints} progress={progress} busy={busy} onSubmitTask={submitTask} onRequestReward={requestReward} />)}
           {activeTab === "tasks" && <section className="section-block"><div className="section-heading"><div><p className="eyebrow">{profile.role === "parent" ? "إدارة الروتين" : "خطوات يومي"}</p><h1>{profile.role === "parent" ? "مهام فاطمة" : "مهامي اليوم"}</h1><p className="section-subtitle">{profile.role === "parent" ? "أضف مهامًا صغيرة تصنع فرقًا كبيرًا." : "كل مهمة تنجزينها تقربك من مكافأتك."}</p></div><span className="heading-icon lavender"><BookOpenCheck size={23} /></span></div>
             <div className="task-layout"><div className="task-list">{tasks.length ? tasks.map((task) => <TaskRow key={task.id} task={task} child={profile.role === "child"} todayDone={todayDone.has(task.id)} completion={myCompletions.find((item) => item.task_id === task.id && item.task_date === today)} onSubmit={() => submitTask(task)} onEdit={() => beginEditTask(task)} onDelete={() => removeTask(task.id)} busy={busy} />) : <EmptyState icon={<BookOpenCheck />} title="ما فيه مهام مضافة" text="أضفوا أول مهمة عشان تبدأ رحلة الإنجاز." />}</div>
               {profile.role === "parent" && <form className="form-card compact-form" onSubmit={addTask}><div className="form-title"><span className="form-icon pink">{editingTaskId ? <Pencil size={17} /> : <Plus size={18} />}</span><div><h3>{editingTaskId ? "تعديل المهمة" : "مهمة جديدة"}</h3><p>خلوها واضحة ومناسبة لعمر فاطمة.</p></div></div><label>اسم المهمة<input required maxLength={80} value={taskTitle} onChange={(e) => setTaskTitle(e.target.value)} placeholder="مثال: ترتيب الألعاب" /></label><label>تفاصيل بسيطة<textarea rows={2} maxLength={180} value={taskDescription} onChange={(e) => setTaskDescription(e.target.value)} placeholder="وش المطلوب؟" /></label><div className="form-row"><label>النجوم<input type="number" required min="1" max="100" value={taskStars} onChange={(e) => setTaskStars(e.target.value)} /></label><label>التكرار<select value={taskCadence} onChange={(e) => setTaskCadence(e.target.value as "daily" | "once")}><option value="daily">يومي</option><option value="once">مرة واحدة</option></select></label></div><button className="primary-button full-button" type="submit">{editingTaskId ? "حفظ التعديلات" : <><Plus size={17} />إضافة المهمة</>}</button>{editingTaskId && <button className="cancel-edit" type="button" onClick={() => { setEditingTaskId(null); setTaskTitle(""); setTaskDescription(""); }}>إلغاء التعديل</button>}</form>}
@@ -432,7 +458,7 @@ function JourneyMascot({ variant }: { variant: "login" | "parent" | "child" }) {
   );
 }
 
-function ParentHome({ family, profile, familyChildren, completions, tasks, pendingReviews, pendingRequests, pointAdjustments, taskMap, rewardMap, childMap, childStars, childDeductions, onReviewCompletion, onReviewReward, onRecordBehavior }: { family: Family | null; profile: Profile; familyChildren: Profile[]; completions: Completion[]; tasks: Task[]; pendingReviews: Completion[]; pendingRequests: RewardRequest[]; pointAdjustments: PointAdjustment[]; taskMap: Map<string, Task>; rewardMap: Map<string, Reward>; childMap: Map<string, Profile>; childStars: (id: string) => number; childDeductions: (id: string) => number; onReviewCompletion: (item: Completion, status: "approved" | "rejected") => void; onReviewReward: (item: RewardRequest, status: "approved" | "rejected") => void; onRecordBehavior: (behavior: string, points: number) => void }) {
+function ParentHome({ family, profile, familyChildren, completions, tasks, pendingReviews, pendingRequests, pendingWishes, pointAdjustments, taskMap, rewardMap, childMap, childStars, childDeductions, onReviewCompletion, onReviewReward, onReviewWish, onRecordBehavior }: { family: Family | null; profile: Profile; familyChildren: Profile[]; completions: Completion[]; tasks: Task[]; pendingReviews: Completion[]; pendingRequests: RewardRequest[]; pendingWishes: WishRequest[]; pointAdjustments: PointAdjustment[]; taskMap: Map<string, Task>; rewardMap: Map<string, Reward>; childMap: Map<string, Profile>; childStars: (id: string) => number; childDeductions: (id: string) => number; onReviewCompletion: (item: Completion, status: "approved" | "rejected") => void; onReviewReward: (item: RewardRequest, status: "approved" | "rejected") => void; onReviewWish: (item: WishRequest, status: "approved" | "rejected") => void; onRecordBehavior: (behavior: string, points: number) => void }) {
   const recent = completions.slice(0, 4);
   const [behavior, setBehavior] = useState("رفع الصوت أو الكلام الجارح بعد التنبيه");
   const [behaviorPoints, setBehaviorPoints] = useState("-1");
@@ -446,17 +472,19 @@ function ParentHome({ family, profile, familyChildren, completions, tasks, pendi
       <section className="panel week-panel"><div className="panel-heading"><div><p className="eyebrow">نبض الرحلة</p><h2>هذا الأسبوع</h2></div><span className="heading-icon mint"><Trophy size={20} /></span></div><div className="week-summary"><b>{completions.filter((item) => item.status === "approved").length}</b><span>إنجاز معتمد<br />حتى الآن</span></div><div className="mini-week">{Array.from({ length: 7 }, (_, i) => { const dt = new Date(); dt.setDate(dt.getDate() - (6 - i)); const date = toLocalDate(dt); const count = completions.filter((item) => item.task_date === date && item.status === "approved").length; return <div className="week-day" key={date}><div className="bar-track"><span style={{ height: `${count ? Math.min(100, 28 + count * 25) : 8}%` }} className={count ? "bar-filled" : "bar-empty"} /></div><small>{weekdayNames[dt.getDay()].slice(0, 1)}</small></div>; })}</div><p className="chart-caption">الإنجازات المعتمدة خلال آخر ٧ أيام</p></section></div>
     <section className="panel behavior-panel"><div className="panel-heading"><div><p className="eyebrow">توجيه بهدوء</p><h2>ملاحظة على تصرف متكرر</h2></div><span className="behavior-total">−{childDeductions(familyChildren[0]?.user_id ?? "")}</span></div><p className="behavior-guidance">سجّلوا نقطة أو نقطتين عند تكرار التصرف بعد التنبيه. نحاسب على التصرف، مو على شعور الغضب.</p><form className="behavior-form" onSubmit={submitBehavior}><label>التصرف<select value={behavior} onChange={(event) => setBehavior(event.target.value)}><option>رفع الصوت أو الكلام الجارح بعد التنبيه</option><option>رفض ترتيب المكان بعد التذكير</option><option>مقاطعة الآخرين أو عدم احترام الدور</option></select></label><label>النقاط<select value={behaviorPoints} onChange={(event) => setBehaviorPoints(event.target.value)}><option value="-1">−١ نقطة</option><option value="-2">−٢ نقطتين</option></select></label><button className="negative-button" type="submit"><X size={16} />تسجيل ملاحظة حمراء</button></form>{pointAdjustments.length > 0 && <div className="behavior-history"><b>آخر الملاحظات</b>{pointAdjustments.slice(0, 3).map((item) => <div className="behavior-history-row" key={item.id}><span>{item.behavior}<small>{shortDate(item.created_at.slice(0, 10))}</small></span><strong>{item.points}</strong></div>)}</div>}</section>
     <section className="panel recent-panel"><div className="panel-heading"><div><p className="eyebrow">آخر الأخبار</p><h2>من رحلة فاطمة</h2></div><span className="heading-icon lavender"><Sparkles size={20} /></span></div>{recent.length ? <div className="activity-list">{recent.map((item) => <ActivityRow key={item.id} item={item} task={taskMap.get(item.task_id)} childName={childMap.get(item.child_id)?.display_name ?? "فاطمة"} />)}</div> : <div className="calm-empty slim"><span>✨</span><p>أول إنجاز بيبدأ الحكاية هنا.</p></div>}</section>
+    <div className="request-inline-panel"><div className="inline-heading"><h2>أمنيات فاطمة</h2><span className="count-badge">{pendingWishes.length}</span></div>{pendingWishes.length ? pendingWishes.slice(0, 3).map((item) => <div className="request-row" key={item.id}><span className="request-gift">✨</span><div className="review-info"><b>{childMap.get(item.child_id)?.display_name ?? "فاطمة"}: {item.wish}</b><small>{item.stars_cost} نجمة · {shortDate(item.requested_at.slice(0,10))}</small></div><div className="review-actions"><button className="approve-button" onClick={() => onReviewWish(item,"approved")} title="اعتماد الأمنية"><Check size={16}/></button><button className="reject-button" onClick={() => onReviewWish(item,"rejected")} title="رفض الأمنية"><X size={16}/></button></div></div>) : <p className="empty-inline">لا توجد أمنيات بانتظار قرارك.</p>}</div>
     <div className="request-inline-panel"><div className="inline-heading"><h2>طلبات المكافآت</h2><span className="count-badge">{pendingRequests.length}</span></div>{pendingRequests.length ? pendingRequests.slice(0, 3).map((item) => <RewardRequestRow key={item.id} request={item} childName={childMap.get(item.child_id)?.display_name ?? "فاطمة"} reward={rewardMap.get(item.reward_id)} onApprove={() => onReviewReward(item, "approved")} onReject={() => onReviewReward(item, "rejected")} />) : <p className="empty-inline">ما فيه طلبات جديدة. فاطمة تجمع نجومها الآن.</p>}</div>
   </>;
 }
 
-function ChildHome({ profile, greeting, tasks, completions, todayDone, rewards, requests, starBalance, approvedStars, deductedPoints, progress, busy, onSubmitTask, onRequestReward }: { profile: Profile; greeting: string; tasks: Task[]; completions: Completion[]; todayDone: Set<string>; rewards: Reward[]; requests: RewardRequest[]; starBalance: number; approvedStars: number; deductedPoints: number; progress: number; busy: boolean; onSubmitTask: (task: Task) => void; onRequestReward: (reward: Reward) => void }) {
+function ChildHome({ profile, greeting, tasks, completions, todayDone, rewards, requests, wishes, wishText, setWishText, wishCost, setWishCost, onSubmitWish, starBalance, approvedStars, deductedPoints, progress, busy, onSubmitTask, onRequestReward }: { profile: Profile; greeting: string; tasks: Task[]; completions: Completion[]; todayDone: Set<string>; rewards: Reward[]; requests: RewardRequest[]; wishes: WishRequest[]; wishText: string; setWishText: (v: string) => void; wishCost: string; setWishCost: (v: string) => void; onSubmitWish: (e: FormEvent<HTMLFormElement>) => void; starBalance: number; approvedStars: number; deductedPoints: number; progress: number; busy: boolean; onSubmitTask: (task: Task) => void; onRequestReward: (reward: Reward) => void }) {
   const availableTasks = tasks.filter((task) => task.cadence !== "once" || !completions.some((item) => item.task_id === task.id && item.status === "approved"));
   const readyTasks = availableTasks.filter((task) => !todayDone.has(task.id));
   const nearest = rewards.find((item) => starBalance < item.stars_cost);
   return <><section className="welcome-banner child-banner"><div className="welcome-copy"><p className="eyebrow">{greeting}</p><h1>يا هلا يا {profile.display_name} <span>🌸</span></h1><p>كل إنجاز منك يضيف نجمة لحكايتك. مستعدة لمغامرة اليوم؟</p><div className="banner-tags"><span><Sparkles size={14} />أنتِ قدها</span><span><Heart size={14} fill="currentColor" />نحب نشوف إنجازاتك</span></div></div><div className="banner-art child-art"><span className="doodle-star star-a">✦</span><span className="doodle-star star-b">✧</span><span className="doodle-star star-c">✦</span><span className="art-ground" /><JourneyMascot variant="child" /></div></section>
     <div className="stats-grid child-stats"><StatCard icon={<Star fill="currentColor" />} tone="yellow" label="نجومي" value={starBalance} hint="جاهزة للمكافآت" /><StatCard icon={<CheckCircle2 />} tone="mint" label="إنجازاتي" value={approvedStars ? completions.filter((item) => item.status === "approved").length : 0} hint="مهمة معتمدة" /><StatCard icon={<Trophy />} tone="lavender" label="مستواي" value={starBalance >= 30 ? "متألقة" : starBalance >= 12 ? "نجمة" : "بدايتي"} hint="كل نجمة تقربك" /></div>
     <EncouragementDeck userId={profile.user_id} />
+    <section className="panel wish-panel"><div className="panel-heading"><div><p className="eyebrow">أحلامك تستاهل</p><h2>صندوق الأمنيات ✨</h2></div><span className="heading-icon peach">🎁</span></div><p>{starBalance >= 20 ? "اكتبي أمنية تتمنينها، واختاري كم نجمة تدفعين. ولي أمرك يقرر قبل خصم أي نجمة." : `تفتح لك الأمنيات عند جمع ٢٠ نجمة. باقي لك ${20-starBalance} نجمة.`}</p>{wishes.filter(w=>w.status==="pending").map(w=><div className="empty-inline" key={w.id}>أمنيتك «{w.wish}» بانتظار ولي أمرك · {w.stars_cost} نجمة</div>)}{starBalance >= 20 && !wishes.some(w=>w.status==="pending") && <form className="behavior-form" onSubmit={onSubmitWish}><label>أمنيتك<input required minLength={2} maxLength={120} value={wishText} onChange={e=>setWishText(e.target.value)} placeholder="مثال: نزهة للحديقة" /></label><label>النجوم التي تدفعينها<input type="number" required min="20" max={starBalance} value={wishCost} onChange={e=>setWishCost(e.target.value)} /></label><button className="primary-button" disabled={busy || Number(wishCost)>starBalance}>أرسل الأمنية للمراجعة</button></form>}</section>
     {deductedPoints > 0 && <div className="child-deduction-banner"><span>−{deductedPoints} نقطة</span><small>تقدرين تعوضينها بإنجازات جديدة 🌱</small></div>}
     <section className="panel progress-panel"><div className="progress-copy"><span className="progress-icon"><Sparkles size={19} /></span><div><p className="eyebrow">مغامرة اليوم</p><h2>خطواتك نحو إنجاز اليوم</h2><p>{todayDone.size} من {tasks.length} مهام وصلت لولي الأمر</p></div></div><div className="progress-meter"><div className="progress-label"><span>تقدمك</span><b>{progress}%</b></div><div className="progress-track"><span style={{ width: `${progress}%` }} /></div></div></section>
     <div className="child-content-grid"><section className="panel tasks-panel"><div className="panel-heading"><div><p className="eyebrow">أول خطوة تبدأ الآن</p><h2>مهام اليوم <span className="count-badge">{readyTasks.length}</span></h2></div><span className="heading-icon lavender"><BookOpenCheck size={21} /></span></div>{availableTasks.length ? <div className="child-task-list">{availableTasks.map((task, index) => <TaskRow key={task.id} task={task} child todayDone={todayDone.has(task.id)} completion={completions.find((item) => item.task_id === task.id && item.task_date === toLocalDate())} onSubmit={() => onSubmitTask(task)} onDelete={() => {}} busy={busy} compact index={index} />)}</div> : <EmptyState icon={<BookOpenCheck />} title="يومك فاضي من المهام" text="اسألي ولي أمرك عن أول مغامرة!" />}</section>
