@@ -51,6 +51,17 @@ export type RewardRequest = {
   reviewed_at: string | null;
 };
 
+export type WishRequest = {
+  id: string;
+  family_id: string;
+  child_id: string;
+  wish: string;
+  stars_cost: number;
+  status: RequestStatus;
+  requested_at: string;
+  reviewed_at: string | null;
+};
+
 export type PointAdjustment = {
   id: string;
   family_id: string;
